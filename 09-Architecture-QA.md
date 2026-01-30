@@ -970,6 +970,473 @@ public class OrderController
 
 ---
 
+## Question 6: The Saga Pattern for Distributed Transactions
+
+### The Question
+> "Explain the Saga pattern for distributed transactions."
+
+### Key Points to Cover
+- What problem Sagas solve
+- Choreography vs Orchestration
+- Compensating transactions
+- When to use
+
+### Detailed Answer
+
+**The Problem:**
+
+```
+In monoliths, we have database transactions:
+
+BEGIN TRANSACTION
+  - Deduct inventory
+  - Charge payment
+  - Create order
+COMMIT (all or nothing)
+
+In microservices, each service has its own database.
+We can't have a single transaction across services.
+
+Enter the Saga pattern:
+A sequence of local transactions with compensation
+```
+
+**Saga Approaches:**
+
+```
+1. CHOREOGRAPHY (Event-driven)
+───────────────────────────────
+Each service publishes events, others react.
+No central coordinator.
+
+Order Service → publishes "OrderCreated"
+    │
+    ▼
+Inventory Service → reserves stock → publishes "StockReserved"
+    │
+    ▼
+Payment Service → charges card → publishes "PaymentCompleted"
+    │
+    ▼
+Order Service → marks order confirmed
+
+If Payment fails → publishes "PaymentFailed"
+    → Inventory Service compensates (releases stock)
+    → Order Service marks order failed
+
+
+2. ORCHESTRATION (Coordinator-driven)
+─────────────────────────────────────
+Central orchestrator directs the flow.
+
+┌─────────────────────┐
+│  Order Saga        │
+│  Orchestrator      │
+└──────────┬─────────┘
+           │
+    ┌──────┼──────┬──────────────┐
+    ▼      ▼      ▼              ▼
+ Inventory Payment Shipping  Notification
+```
+
+**Orchestration Implementation:**
+
+```csharp
+public class OrderSagaOrchestrator
+{
+    public async Task<SagaResult> ExecuteAsync(CreateOrderCommand command)
+    {
+        var sagaId = Guid.NewGuid();
+        var state = new OrderSagaState();
+
+        try
+        {
+            // Step 1: Create order (pending)
+            state.OrderId = await _orderService.CreatePendingAsync(command);
+
+            // Step 2: Reserve inventory
+            state.InventoryReserved = await _inventoryService.ReserveAsync(
+                command.Items);
+
+            // Step 3: Process payment
+            state.PaymentId = await _paymentService.ChargeAsync(
+                command.CustomerId,
+                command.Total);
+
+            // Step 4: Confirm order
+            await _orderService.ConfirmAsync(state.OrderId);
+
+            // Step 5: Trigger fulfillment (async, not part of saga)
+            await _messageBus.PublishAsync(new OrderConfirmed(state.OrderId));
+
+            return SagaResult.Success(state.OrderId);
+        }
+        catch (PaymentFailedException ex)
+        {
+            // Compensation: release inventory, cancel order
+            await CompensateAsync(state, ex);
+            return SagaResult.Failed(ex.Message);
+        }
+        catch (InventoryException ex)
+        {
+            // Compensation: cancel order only
+            await CompensateAsync(state, ex);
+            return SagaResult.Failed(ex.Message);
+        }
+    }
+
+    private async Task CompensateAsync(OrderSagaState state, Exception ex)
+    {
+        // Compensate in reverse order
+        if (state.PaymentId.HasValue)
+        {
+            await _paymentService.RefundAsync(state.PaymentId.Value);
+        }
+
+        if (state.InventoryReserved)
+        {
+            await _inventoryService.ReleaseAsync(state.OrderId);
+        }
+
+        if (state.OrderId.HasValue)
+        {
+            await _orderService.FailAsync(state.OrderId.Value, ex.Message);
+        }
+    }
+}
+```
+
+**Choreography vs Orchestration:**
+
+| Aspect | Choreography | Orchestration |
+|--------|--------------|---------------|
+| Coupling | Loose (event-driven) | Tighter (central coordinator) |
+| Complexity | Spread across services | Centralized logic |
+| Visibility | Harder to trace flow | Single place to see flow |
+| Failure handling | Each service handles | Orchestrator manages |
+| Best for | Simple flows | Complex flows |
+
+### Communication Tactics
+
+- **Define the problem first**: Why can't we use normal transactions?
+- **Show both approaches**: Choreography and Orchestration
+- **Emphasize compensation**: The rollback mechanism
+
+---
+
+## Question 7: API Versioning Strategies
+
+### The Question
+> "How do you handle API versioning in a production system?"
+
+### Key Points to Cover
+- Why versioning matters
+- Different versioning approaches
+- Implementation in ASP.NET Core
+- Deprecation strategy
+
+### Detailed Answer
+
+**Why Version APIs:**
+
+```
+- Clients depend on your API contract
+- You need to evolve without breaking them
+- Some clients can't update immediately
+- Breaking changes require a new version
+```
+
+**Versioning Strategies:**
+
+```
+1. URL PATH VERSIONING (Most common)
+   /api/v1/orders
+   /api/v2/orders
+
+   Pros: Clear, easy to see version
+   Cons: Violates REST principle (URL should be resource)
+
+2. QUERY STRING VERSIONING
+   /api/orders?api-version=1.0
+   /api/orders?api-version=2.0
+
+   Pros: Clean URLs
+   Cons: Easy to forget, can be cached incorrectly
+
+3. HEADER VERSIONING
+   GET /api/orders
+   X-API-Version: 1.0
+
+   Pros: Clean URLs, follows REST better
+   Cons: Not visible in logs, harder to test in browser
+
+4. MEDIA TYPE VERSIONING
+   Accept: application/vnd.company.api+json;version=1
+
+   Pros: Most RESTful
+   Cons: Complex, rarely used
+```
+
+**ASP.NET Core Implementation:**
+
+```csharp
+// Install: Microsoft.AspNetCore.Mvc.Versioning
+
+// Program.cs
+builder.Services.AddApiVersioning(options =>
+{
+    options.DefaultApiVersion = new ApiVersion(1, 0);
+    options.AssumeDefaultVersionWhenUnspecified = true;
+    options.ReportApiVersions = true;  // Response header
+
+    // Support multiple versioning schemes
+    options.ApiVersionReader = ApiVersionReader.Combine(
+        new UrlSegmentApiVersionReader(),           // /api/v1/
+        new HeaderApiVersionReader("X-API-Version") // Fallback
+    );
+});
+
+// Controller
+[ApiController]
+[Route("api/v{version:apiVersion}/orders")]
+public class OrdersController : ControllerBase
+{
+    [HttpGet]
+    [ApiVersion("1.0")]
+    public IActionResult GetV1()
+    {
+        return Ok(new { format = "v1" });
+    }
+
+    [HttpGet]
+    [ApiVersion("2.0")]
+    public IActionResult GetV2()
+    {
+        return Ok(new { format = "v2", newField = "value" });
+    }
+}
+
+// Or use separate controllers
+[ApiController]
+[Route("api/v{version:apiVersion}/[controller]")]
+[ApiVersion("1.0")]
+public class OrdersV1Controller : ControllerBase { }
+
+[ApiController]
+[Route("api/v{version:apiVersion}/[controller]")]
+[ApiVersion("2.0")]
+public class OrdersV2Controller : ControllerBase { }
+```
+
+**Deprecation Strategy:**
+
+```csharp
+// Mark version as deprecated
+[ApiVersion("1.0", Deprecated = true)]
+public class OrdersV1Controller : ControllerBase
+{
+    [HttpGet]
+    public IActionResult Get()
+    {
+        // Response includes: api-deprecated-versions: 1.0
+        return Ok(data);
+    }
+}
+
+// Deprecation timeline:
+// 1. Announce deprecation (blog, email, docs)
+// 2. Add Sunset header with date
+// 3. Return deprecation warning in response
+// 4. After sunset date: return 410 Gone
+
+[HttpGet]
+public IActionResult Get()
+{
+    Response.Headers["Sunset"] = "Sat, 31 Dec 2025 23:59:59 GMT";
+    Response.Headers["Deprecation"] = "true";
+
+    return Ok(data);
+}
+```
+
+### Communication Tactics
+
+- **State preference**: URL path is most practical for most systems
+- **Show implementation**: Concrete ASP.NET Core code
+- **Mention deprecation**: The full lifecycle, not just versioning
+
+---
+
+## Question 8: The Outbox Pattern
+
+### The Question
+> "What is the Outbox pattern and when would you use it?"
+
+### Key Points to Cover
+- The dual-write problem
+- How Outbox solves it
+- Implementation approach
+- Trade-offs
+
+### Detailed Answer
+
+**The Problem: Dual Writes**
+
+```
+Common scenario: Save to database AND publish event
+
+public async Task CreateOrder(Order order)
+{
+    await _database.SaveAsync(order);        // Success!
+    await _messageBus.PublishAsync(event);   // FAILS!
+
+    // Now we have:
+    // - Order saved to database
+    // - Event NOT published
+    // - Downstream services never know about the order
+
+    // Or worse, the other way:
+    await _messageBus.PublishAsync(event);   // Success!
+    await _database.SaveAsync(order);        // FAILS!
+
+    // - Event published
+    // - Order NOT saved
+    // - Subscribers process non-existent order!
+}
+```
+
+**The Solution: Outbox Pattern**
+
+```
+Instead of publishing directly, save the event to the database
+in the same transaction as the business data.
+
+A background process reads the outbox and publishes to the message bus.
+
+┌─────────────────────────────────────────────────────────────────────────┐
+│                      OUTBOX PATTERN                                      │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                          │
+│  Order Service                                                           │
+│  ┌──────────────────────────────────────────────────────────────────┐  │
+│  │  BEGIN TRANSACTION                                                │  │
+│  │    INSERT INTO orders (...)                                       │  │
+│  │    INSERT INTO outbox_messages (type, payload, ...)              │  │
+│  │  COMMIT                                                           │  │
+│  └──────────────────────────────────────────────────────────────────┘  │
+│                                                                          │
+│  Outbox Processor (Background)                                          │
+│  ┌──────────────────────────────────────────────────────────────────┐  │
+│  │  POLL outbox_messages WHERE processed_at IS NULL                  │  │
+│  │  FOR EACH message:                                                 │  │
+│  │    PUBLISH to message bus                                          │  │
+│  │    UPDATE outbox_messages SET processed_at = NOW()                │  │
+│  └──────────────────────────────────────────────────────────────────┘  │
+│                                                                          │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+**Implementation:**
+
+```csharp
+// Outbox message entity
+public class OutboxMessage
+{
+    public Guid Id { get; set; }
+    public string Type { get; set; }           // "OrderCreated"
+    public string Payload { get; set; }        // JSON serialized event
+    public DateTime CreatedAt { get; set; }
+    public DateTime? ProcessedAt { get; set; }
+}
+
+// Service that saves with outbox
+public class OrderService
+{
+    public async Task CreateOrderAsync(CreateOrderCommand command)
+    {
+        using var transaction = await _context.Database.BeginTransactionAsync();
+
+        try
+        {
+            // 1. Save the order
+            var order = new Order { /* ... */ };
+            _context.Orders.Add(order);
+
+            // 2. Save the event to outbox (same transaction!)
+            var @event = new OrderCreatedEvent(order.Id, order.CustomerId);
+            _context.OutboxMessages.Add(new OutboxMessage
+            {
+                Id = Guid.NewGuid(),
+                Type = nameof(OrderCreatedEvent),
+                Payload = JsonSerializer.Serialize(@event),
+                CreatedAt = DateTime.UtcNow
+            });
+
+            await _context.SaveChangesAsync();
+            await transaction.CommitAsync();
+
+            // Atomically saved: order + outbox message
+        }
+        catch
+        {
+            await transaction.RollbackAsync();
+            throw;
+        }
+    }
+}
+
+// Background processor
+public class OutboxProcessor : BackgroundService
+{
+    protected override async Task ExecuteAsync(CancellationToken ct)
+    {
+        while (!ct.IsCancellationRequested)
+        {
+            var messages = await _context.OutboxMessages
+                .Where(m => m.ProcessedAt == null)
+                .OrderBy(m => m.CreatedAt)
+                .Take(100)
+                .ToListAsync(ct);
+
+            foreach (var message in messages)
+            {
+                try
+                {
+                    await _messageBus.PublishAsync(message.Type, message.Payload);
+                    message.ProcessedAt = DateTime.UtcNow;
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Failed to publish {MessageId}", message.Id);
+                    // Will retry on next poll
+                }
+            }
+
+            await _context.SaveChangesAsync(ct);
+            await Task.Delay(TimeSpan.FromSeconds(1), ct);
+        }
+    }
+}
+```
+
+**Trade-offs:**
+
+| Aspect | Consideration |
+|--------|---------------|
+| Latency | Small delay (polling interval) before event published |
+| Ordering | Events published in order within same service |
+| Idempotency | Consumers must handle duplicate messages |
+| Complexity | Additional table, background processor |
+| Reliability | At-least-once delivery guaranteed |
+
+### Communication Tactics
+
+- **Start with the problem**: Dual writes cause inconsistency
+- **Show the solution clearly**: Same transaction = atomicity
+- **Mention trade-offs**: At-least-once means idempotent consumers
+
+---
+
 ## Quick Review - Key Takeaways
 
 | Question | Key Point |
@@ -979,3 +1446,6 @@ public class OrderController
 | CQRS | Use when read/write patterns differ, not always |
 | DDD Concepts | Entity=identity, Value Object=values, Aggregate=boundary |
 | Eventual Consistency | Saga for transactions, Outbox for reliable events |
+| Saga Pattern | Orchestration vs Choreography, compensating transactions |
+| API Versioning | URL path most common, plan for deprecation |
+| Outbox Pattern | Solves dual-write problem, at-least-once delivery |

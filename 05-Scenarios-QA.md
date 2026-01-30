@@ -900,6 +900,256 @@ My guidelines:
 
 ---
 
+## Question 6: Handling Changing Requirements Mid-Sprint
+
+### The Question
+> "How do you handle a situation where requirements keep changing mid-sprint?"
+
+### Key Points to Cover
+- Process for managing change
+- Stakeholder communication
+- Protecting team focus
+- Trade-off discussions
+
+### Detailed Answer
+
+**My Approach:**
+
+```
+1. ACKNOWLEDGE THE REALITY
+   - Requirements DO change - that's normal
+   - The question is HOW we handle it, not IF
+
+2. ESTABLISH A PROCESS
+   - All changes go through Product Owner (single point)
+   - Impact assessment before accepting
+   - Explicit trade-off discussion
+   - Sprint scope renegotiation if needed
+
+3. PROTECT THE TEAM
+   - Shield developers from constant context switching
+   - Batch small changes for discussion
+   - Reserve capacity for "interrupt" work (10-15%)
+```
+
+**Framework for Change Requests:**
+
+```csharp
+// Decision matrix for mid-sprint changes
+public enum ChangeResponse
+{
+    // Critical bug or security issue
+    AcceptImmediately,    // Drop current work, fix now
+
+    // Important but not urgent
+    SwapForExistingWork,  // "We can do this IF we drop X"
+
+    // Nice to have
+    AddToBacklog,         // "Great idea, let's plan for next sprint"
+
+    // Scope creep
+    PushBack              // "This changes the goal, needs PM discussion"
+}
+```
+
+**Sample Response:**
+
+> "When requirements change mid-sprint, I first assess the impact - is this a critical fix or a nice-to-have? For critical issues, we adapt immediately.
+>
+> For other changes, I facilitate a trade-off discussion: 'We can add feature X, but we'll need to drop or defer feature Y.' This makes the cost visible.
+>
+> I also try to protect the team from constant interrupts. Small changes get batched for discussion. I reserve some sprint capacity for unplanned work so we're not constantly failing commitments.
+>
+> The key is transparent communication - stakeholders understand the trade-offs, and the team has predictable work."
+
+### Communication Tactics
+
+- **Emphasize**: "I manage change through process, not resistance"
+- **Show pragmatism**: Some changes are urgent, others can wait
+- **Mention trade-offs**: Make the cost visible
+
+---
+
+## Question 7: Application Under Heavy Load - Incident Response
+
+### The Question
+> "Your application is under heavy load and starting to fail - walk me through your response."
+
+### Key Points to Cover
+- Incident response process
+- Immediate vs. long-term actions
+- Communication during incidents
+- Post-incident learning
+
+### Detailed Answer
+
+**Incident Response Framework:**
+
+```
+PHASE 1: STABILIZE (First 5 minutes)
+────────────────────────────────────
+Goal: Stop the bleeding, buy time
+
+Actions:
+1. Acknowledge the incident (set status page, notify stakeholders)
+2. Quick assessment: What's failing? What percentage of users?
+3. Immediate mitigation options:
+   - Scale up (add more instances)
+   - Shed load (enable circuit breakers, rate limiting)
+   - Disable non-critical features
+   - Rollback if recent deployment
+
+PHASE 2: DIAGNOSE (5-30 minutes)
+────────────────────────────────
+Goal: Find the root cause
+
+Actions:
+1. Check the 4 Golden Signals: Latency, Traffic, Errors, Saturation
+2. Correlate with recent changes (deployment, config, traffic spike)
+3. Check dependencies (database, external services, cache)
+4. Look at resource utilization (CPU, memory, connections)
+
+PHASE 3: RESOLVE (30+ minutes)
+──────────────────────────────
+Goal: Fix the underlying issue
+
+Actions:
+1. Implement targeted fix based on diagnosis
+2. Gradual rollout (don't go from 0 to 100 instantly)
+3. Verify fix with metrics
+4. Stand down when stable for 15+ minutes
+```
+
+**Common Causes & Quick Fixes:**
+
+```csharp
+// Connection pool exhaustion
+// Symptom: Requests hanging, "no available connection" errors
+// Quick fix: Increase pool size, check for connection leaks
+services.AddDbContext<AppDbContext>(options =>
+    options.UseSqlServer(connectionString, sql =>
+        sql.MaxPoolSize(200)));  // Increase from default 100
+
+// Memory pressure
+// Symptom: GC pauses, slow responses, OOM errors
+// Quick fix: Restart instances (buys time), scale horizontally
+
+// Database locks
+// Symptom: Transactions timing out, specific operations slow
+// Quick fix: Kill blocking queries, review transaction isolation
+
+// External service slowdown
+// Symptom: Requests to one service taking too long
+// Quick fix: Enable circuit breaker, serve cached/default responses
+```
+
+**Post-Incident:**
+
+```
+Within 24 hours:
+- Document timeline of events
+- Identify root cause and contributing factors
+- Create action items for permanent fix
+
+Within 1 week:
+- Post-mortem meeting (blameless)
+- Update runbooks and monitoring
+- Implement preventive measures
+```
+
+### Communication Tactics
+
+- **Show structure**: Have a framework, don't panic
+- **Emphasize stability first**: Don't debug while burning
+- **Mention post-mortem**: Learning from incidents is key
+
+---
+
+## Question 8: Estimating Complex Features
+
+### The Question
+> "How do you approach estimating a complex feature you've never built before?"
+
+### Key Points to Cover
+- Estimation techniques
+- Handling uncertainty
+- Communication with stakeholders
+- Iterative refinement
+
+### Detailed Answer
+
+**Estimation Framework:**
+
+```
+1. BREAK DOWN THE UNKNOWN
+   - Identify what you know vs. don't know
+   - List assumptions that affect the estimate
+   - Find comparable past work (even if not identical)
+
+2. USE RANGES, NOT POINTS
+   - Best case: Everything goes smoothly
+   - Expected: Normal friction and surprises
+   - Worst case: Significant unknowns revealed
+
+3. SPIKE FIRST IF POSSIBLE
+   - Invest 1-2 days in a proof of concept
+   - Validate key assumptions
+   - Re-estimate with better information
+
+4. COMMUNICATE UNCERTAINTY
+   - "I estimate 2-3 weeks, but I'd like to spike the X integration first"
+   - "Based on our Y experience, plus 50% for unknowns"
+```
+
+**Practical Techniques:**
+
+```csharp
+// Technique 1: Decomposition
+// Break feature into smallest estimable pieces
+public class FeatureEstimate
+{
+    public string Feature { get; set; } = "Payment Gateway Integration";
+
+    public List<Task> Tasks { get; set; } = new()
+    {
+        new Task("Research gateway API", hours: 4, uncertainty: Uncertainty.Low),
+        new Task("Design data model", hours: 8, uncertainty: Uncertainty.Medium),
+        new Task("Implement core flow", hours: 24, uncertainty: Uncertainty.Medium),
+        new Task("Handle edge cases", hours: 16, uncertainty: Uncertainty.High),
+        new Task("Testing & integration", hours: 16, uncertainty: Uncertainty.Medium),
+        new Task("Documentation", hours: 4, uncertainty: Uncertainty.Low)
+    };
+
+    // Total: 72 hours base
+    // With uncertainty buffer: 90-100 hours
+    // = 2.5 - 3 weeks
+}
+
+// Technique 2: Reference class forecasting
+// "Our last API integration took 3 weeks. This is similar complexity,
+// but we don't know the external API well. Estimate: 3-4 weeks."
+
+// Technique 3: Three-point estimation
+// Optimistic + (4 × Most Likely) + Pessimistic / 6
+// (2 weeks + 4×3 weeks + 5 weeks) / 6 = 3.2 weeks
+```
+
+**Communication Script:**
+
+> "For this feature, I'd break it down like this: [list components]. Based on similar work we've done, I estimate [X] weeks with medium confidence.
+>
+> There are a few unknowns that could affect this: [list]. I'd suggest a 2-day spike on [key unknown] before committing to a deadline.
+>
+> I'd rather give a range of [X-Y weeks] than a single number. If we discover [risk], it could push toward the higher end."
+
+### Communication Tactics
+
+- **Never give a single number**: Ranges communicate uncertainty
+- **Identify unknowns explicitly**: Shows you've thought it through
+- **Suggest spikes**: Reduces risk before big commitments
+
+---
+
 ## Quick Review - Key Takeaways
 
 | Question | Key Point |
@@ -909,3 +1159,6 @@ My guidelines:
 | Monolith Migration | Strangler Fig, start small, database is hardest |
 | Tech Debt Balance | Quantify in business terms, build into estimates |
 | Code Review | Knowledge sharing, approve with suggestions |
+| Changing Requirements | Trade-off discussions, protect team focus |
+| Heavy Load Incident | Stabilize first, diagnose second, learn after |
+| Complex Estimation | Break down, use ranges, spike unknowns |

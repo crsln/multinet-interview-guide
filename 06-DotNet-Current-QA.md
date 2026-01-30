@@ -928,6 +928,399 @@ public Config GetConfig(string key)
 
 ---
 
+## Question 6: What's New in .NET 9
+
+### The Question
+> "What's new in .NET 9 that excites you?"
+
+### Key Points to Cover
+- New features and improvements
+- Practical use cases
+- Backward compatibility considerations
+
+### Detailed Answer
+
+**.NET 9 Highlights (Released November 2024):**
+
+```csharp
+// 1. Task.WhenEach - Process tasks as they complete
+// Instead of waiting for all, process results as they arrive
+
+var tasks = new[]
+{
+    FetchDataFromServiceA(),
+    FetchDataFromServiceB(),
+    FetchDataFromServiceC()
+};
+
+// Old way - wait for all
+// var results = await Task.WhenAll(tasks);
+
+// .NET 9 way - process as each completes
+await foreach (var task in Task.WhenEach(tasks))
+{
+    var result = await task;  // Already completed, no wait
+    ProcessResult(result);     // Start processing immediately
+}
+
+// Great for: Dashboard loading, parallel API calls, search aggregation
+```
+
+```csharp
+// 2. New Lock type - Better synchronization API
+// More intuitive than Monitor-based locking
+
+private readonly Lock _lock = new();
+
+public void ThreadSafeMethod()
+{
+    lock (_lock)  // Compiler recognizes Lock type
+    {
+        // Critical section
+    }
+
+    // Or explicit scoping
+    using (_lock.EnterScope())
+    {
+        // Critical section
+    }
+}
+
+// Benefits: Cleaner API, better performance than object locking
+```
+
+```csharp
+// 3. Base64Url class - URL-safe encoding
+// No more manual replacement of +/= characters
+
+// Old way
+var base64 = Convert.ToBase64String(data)
+    .Replace('+', '-')
+    .Replace('/', '_')
+    .TrimEnd('=');
+
+// .NET 9 way
+var urlSafe = Base64Url.EncodeToString(data);
+var decoded = Base64Url.DecodeFromChars(urlSafe);
+
+// Great for: JWT tokens, URL parameters, file names
+```
+
+```csharp
+// 4. LINQ improvements
+// CountBy - count occurrences by key
+
+var words = new[] { "apple", "banana", "apple", "cherry", "banana", "apple" };
+
+// Old way
+var counts = words.GroupBy(w => w).ToDictionary(g => g.Key, g => g.Count());
+
+// .NET 9 way
+var counts = words.CountBy(w => w);
+// { "apple": 3, "banana": 2, "cherry": 1 }
+
+// AggregateBy - aggregate by key
+var orders = GetOrders();
+var totalsByCustomer = orders.AggregateBy(
+    o => o.CustomerId,
+    0m,
+    (total, order) => total + order.Amount);
+```
+
+**What Excites Me Most:**
+
+> "Task.WhenEach is what excites me most. In payment systems, we often call multiple services in parallel - fraud check, balance check, rate lookup. With WhenEach, we can start processing results as soon as each completes, rather than waiting for the slowest one.
+>
+> The new Lock type is also great for code clarity. It's more intuitive than the old Monitor-based locking, and the performance improvements are nice for high-contention scenarios."
+
+### Communication Tactics
+
+- **Show practical application**: Not just features, but when you'd use them
+- **Mention it's STS**: 18-month support, not LTS like .NET 8
+- **Connect to real scenarios**: Parallel API calls, thread safety
+
+---
+
+## Question 7: IEnumerable vs ICollection vs IList vs IQueryable
+
+### The Question
+> "Explain the difference between IEnumerable, ICollection, IList, and IQueryable."
+
+### Key Points to Cover
+- Interface hierarchy
+- When to use each
+- Performance implications
+- Common mistakes
+
+### Detailed Answer
+
+**Interface Hierarchy:**
+
+```
+IEnumerable<T>           ← Most basic: iteration only
+    │
+    └── ICollection<T>   ← Adds: Count, Add, Remove, Contains
+            │
+            └── IList<T> ← Adds: Index access, Insert, RemoveAt
+
+IQueryable<T>            ← Separate branch: deferred execution with expression trees
+    │
+    └── (extends IEnumerable<T>)
+```
+
+**Comparison Table:**
+
+| Interface | Capabilities | Best For |
+|-----------|-------------|----------|
+| `IEnumerable<T>` | Forward iteration only | Read-only sequences, streaming |
+| `ICollection<T>` | + Count, Add, Remove | Modification without index |
+| `IList<T>` | + Index access `[i]` | Random access by position |
+| `IQueryable<T>` | Expression tree building | Database queries (EF Core) |
+
+**When to Use Each:**
+
+```csharp
+// IEnumerable<T> - When you only need to iterate
+public IEnumerable<Order> GetRecentOrders()
+{
+    return _orders.Where(o => o.Date > DateTime.Today.AddDays(-7));
+    // Caller can foreach, but can't modify or count without iterating
+}
+
+// ICollection<T> - When you need Count or modification
+public void ProcessOrders(ICollection<Order> orders)
+{
+    Console.WriteLine($"Processing {orders.Count} orders");  // O(1) Count
+    orders.Add(new Order());  // Can modify
+}
+
+// IList<T> - When you need index access
+public void UpdateOrder(IList<Order> orders, int index)
+{
+    orders[index].Status = OrderStatus.Processed;  // Direct access
+    orders.Insert(0, priorityOrder);  // Insert at position
+}
+
+// IQueryable<T> - For database queries (expression trees)
+public IQueryable<Order> GetOrdersQuery()
+{
+    return _context.Orders.Where(o => o.Amount > 100);
+    // NOT executed yet - builds expression tree
+    // SQL generated when enumerated
+}
+```
+
+**Common Mistakes:**
+
+```csharp
+// MISTAKE 1: Using IQueryable when you mean IEnumerable
+public IQueryable<Order> GetOrders()
+{
+    return _context.Orders.ToList().AsQueryable();  // BAD
+    // Already materialized, AsQueryable is pointless
+}
+
+// MISTAKE 2: Multiple enumeration of IEnumerable
+public void Process(IEnumerable<Order> orders)
+{
+    var count = orders.Count();      // Enumerates entire sequence
+    foreach (var order in orders)    // Enumerates AGAIN
+    {
+        // ...
+    }
+    // If orders is a database query, this runs the query TWICE!
+}
+
+// BETTER: Materialize once if you need multiple operations
+public void Process(IEnumerable<Order> orders)
+{
+    var orderList = orders.ToList();  // Single enumeration
+    var count = orderList.Count;       // O(1)
+    foreach (var order in orderList)   // Uses same list
+    {
+        // ...
+    }
+}
+
+// MISTAKE 3: Returning IList when you don't need modification
+public IList<Order> GetOrders()  // Overly permissive
+public IEnumerable<Order> GetOrders()  // Better - no implied mutability
+```
+
+**Method Parameter Guidelines:**
+
+```csharp
+// Accept the most general type that works
+public void ProcessOrders(IEnumerable<Order> orders)  // Accept any sequence
+
+// Return the most specific type that's useful
+public IReadOnlyList<Order> GetOrders()  // Caller knows they can index and count
+```
+
+### Communication Tactics
+
+- **Show the hierarchy**: IEnumerable → ICollection → IList
+- **Emphasize IQueryable**: Expression trees, database queries
+- **Mention common mistakes**: Multiple enumeration, ToList().AsQueryable()
+
+---
+
+## Question 8: Garbage Collection in .NET
+
+### The Question
+> "How does garbage collection work in .NET? Explain generations and the Large Object Heap."
+
+### Key Points to Cover
+- Generational GC concept
+- Gen 0, 1, 2 behavior
+- Large Object Heap (LOH)
+- Performance implications
+
+### Detailed Answer
+
+**Generational Garbage Collection:**
+
+```
+WHY GENERATIONS?
+────────────────
+Observation: Most objects die young (short-lived)
+Optimization: Check young objects frequently, old objects rarely
+
+Generation 0 (Gen 0)
+├── Newest objects
+├── Collected most frequently (every few milliseconds)
+├── Objects that survive → promoted to Gen 1
+└── Size: ~256 KB - 4 MB
+
+Generation 1 (Gen 1)
+├── Objects that survived Gen 0 collection
+├── Collected less frequently
+├── Buffer between young and old
+└── Objects that survive → promoted to Gen 2
+
+Generation 2 (Gen 2)
+├── Long-lived objects
+├── Collected least frequently (can cause pauses)
+├── Full GC includes Gen 2
+└── Can grow large if objects aren't collected
+```
+
+**GC Process:**
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                         GC PROCESS                                       │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                          │
+│  1. MARK PHASE                                                           │
+│     - Start from "roots" (stack variables, static fields)               │
+│     - Traverse all reachable objects                                    │
+│     - Mark them as "alive"                                              │
+│                                                                          │
+│  2. SWEEP PHASE                                                          │
+│     - Unmarked objects = garbage                                        │
+│     - Memory reclaimed                                                  │
+│                                                                          │
+│  3. COMPACT PHASE (sometimes)                                           │
+│     - Move surviving objects together                                   │
+│     - Eliminates fragmentation                                          │
+│     - Updates references to new locations                               │
+│                                                                          │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+**Large Object Heap (LOH):**
+
+```csharp
+// Objects >= 85,000 bytes go to LOH
+// LOH is NOT compacted by default (expensive for large objects)
+
+// This goes on LOH:
+var largeArray = new byte[85000];  // >= 85KB
+
+// LOH issues:
+// 1. Collected only during Gen 2 collections (infrequent)
+// 2. Fragmentation over time (holes between objects)
+// 3. Can cause OutOfMemoryException even with "free" space
+
+// Mitigation strategies:
+// 1. Use ArrayPool<T> to reuse large arrays
+var buffer = ArrayPool<byte>.Shared.Rent(100000);
+try
+{
+    // Use buffer
+}
+finally
+{
+    ArrayPool<byte>.Shared.Return(buffer);
+}
+
+// 2. Enable LOH compaction (expensive, use sparingly)
+GCSettings.LargeObjectHeapCompactionMode =
+    GCLargeObjectHeapCompactionMode.CompactOnce;
+GC.Collect();
+```
+
+**Server vs Workstation GC:**
+
+```csharp
+// Workstation GC (default)
+// - Single GC thread
+// - Lower latency
+// - For client apps
+
+// Server GC
+// - One GC thread per CPU core
+// - Higher throughput
+// - For server apps
+
+// Enable in csproj:
+<PropertyGroup>
+    <ServerGarbageCollection>true</ServerGarbageCollection>
+</PropertyGroup>
+
+// Or in runtimeconfig.json:
+{
+    "runtimeOptions": {
+        "configProperties": {
+            "System.GC.Server": true
+        }
+    }
+}
+```
+
+**Performance Tips:**
+
+```csharp
+// 1. Avoid allocations in hot paths
+// BAD: Creates new string on each call
+public string GetFullName() => $"{FirstName} {LastName}";
+
+// BETTER: Reuse StringBuilder or cache result
+private string _fullName;
+public string GetFullName() => _fullName ??= $"{FirstName} {LastName}";
+
+// 2. Use Span<T> and stackalloc for temporary buffers
+Span<byte> buffer = stackalloc byte[256];  // Stack, not heap
+
+// 3. Reduce Gen 2 collections
+// - Object pooling for frequently created/destroyed objects
+// - Avoid holding references longer than needed
+
+// 4. Monitor GC metrics
+// - % Time in GC (should be < 10%)
+// - Gen 2 collections (should be rare)
+// - LOH size growth
+```
+
+### Communication Tactics
+
+- **Show understanding of generations**: Why they exist, how they work
+- **Mention LOH**: Shows deeper knowledge
+- **Give practical tips**: ArrayPool, Server GC, monitoring
+
+---
+
 ## Quick Review - Key Takeaways
 
 | Question | Key Point |
@@ -937,3 +1330,6 @@ public Config GetConfig(string key)
 | Native AOT | Perfect for Lambda/CLI, not for EF migrations |
 | Keyed Services | Solves multiple-implementation problem cleanly |
 | Frozen vs Dictionary | Frozen = static, read-heavy; Dictionary = dynamic |
+| .NET 9 Features | Task.WhenEach, Lock type, Base64Url, CountBy |
+| Collection Interfaces | IEnumerable → ICollection → IList; IQueryable for EF |
+| Garbage Collection | Generational GC, LOH for large objects, use pooling |

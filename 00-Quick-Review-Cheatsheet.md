@@ -272,21 +272,79 @@ using Point = (int X, int Y);
 
 ---
 
-## Files in This Guide
+## Behavioral & HR Questions
 
-| File | Priority | Topics |
-|------|----------|--------|
-| 01-OOP-Principles | HIGH | 4 pillars with C# examples |
-| 02-Engineering-Principles-SOLID | HIGH | SOLID, DRY, KISS, YAGNI |
-| 03-Unit-Testing | HIGH | Why test, xUnit, Moq |
-| 04-Design-Patterns | HIGH | All patterns with examples |
-| 05-Real-World-Scenarios | HIGH | Architecture & problem-solving |
-| 06-DotNet-Current | MEDIUM | .NET 8/9, C# 12/13 |
-| 07-Clean-Code | MEDIUM | Naming, methods, code smells |
-| 08-DevOps-Technologies | MEDIUM | Docker, K8s, Redis, Elasticsearch |
-| 09-Architecture-Concepts | HIGH | Microservices, Clean Architecture, DDD |
-| 10-Coding-Practice | MEDIUM | LINQ, algorithms, practice |
+### STAR Method
+- **S**ituation - Context and background
+- **T**ask - Your specific responsibility
+- **A**ction - Steps YOU took
+- **R**esult - Outcome with metrics
+
+### Key Tips
+- Keep answers to 2-3 minutes
+- Focus on YOUR contributions ("I" not "we")
+- Quantify results when possible
+- Prepare 5-7 versatile stories
+
+### "Tell Me About Yourself" Structure
+```
+Present: Current role and key achievements
+Past: Relevant experience that built your skills
+Future: Why this company/role excites you
+```
 
 ---
 
-**Good luck with your interview at Multinet Up!** 🚀
+## Files in This Guide
+
+### Technical Q&A Files
+
+| File | Priority | Topics |
+|------|----------|--------|
+| 01-OOP-Principles-QA | HIGH | 4 pillars with C# examples |
+| 02-SOLID-Principles-QA | HIGH | SOLID with code examples |
+| 03-Unit-Testing-QA | HIGH | Why test, xUnit, Moq |
+| 04-Design-Patterns-QA | HIGH | All patterns with examples |
+| 05-Scenarios-QA | HIGH | Real-world problem-solving (8 questions) |
+| 06-DotNet-Current-QA | MEDIUM | .NET 8/9, C# 12/13 (8 questions) |
+| 07-Clean-Code-QA | MEDIUM | Naming, methods, code smells |
+| 08-DevOps-QA | MEDIUM | Docker, K8s, Redis, Elasticsearch |
+| 09-Architecture-QA | HIGH | Microservices, DDD, patterns (8 questions) |
+| 10-Coding-Practice-QA | MEDIUM | LINQ, algorithms, practice |
+
+### New Files (Phase 2)
+
+| File | Priority | Topics |
+|------|----------|--------|
+| 11-Behavioral-Questions-QA | HIGH | 8 STAR method questions for senior devs |
+| 12-System-Design-QA | HIGH | 7 system design questions with diagrams |
+| 13-Fintech-Domain-QA | HIGH | Payments, PCI-DSS, 3D Secure, fraud |
+| 14-HR-Interview-QA | HIGH | Tell me about yourself, salary, weaknesses |
+| 15-Your-Experience-Stories | HIGH | Personalized STAR templates for your CV |
+
+---
+
+## Pre-Interview Checklist
+
+### Day Before
+- [ ] Review cheatsheet and priority files
+- [ ] Prepare 5-7 STAR stories
+- [ ] Research Multinet Up (products, scale, recent news)
+- [ ] Know your salary expectations (range, not single number)
+- [ ] Have 3-5 questions to ask them
+
+### Day Of
+- [ ] Review "Tell me about yourself" script
+- [ ] Check tech setup (if remote)
+- [ ] Have copies of CV (if in-person)
+- [ ] Arrive 10 minutes early
+
+### Questions to Ask Them
+1. "What does success look like in this role after 6 months?"
+2. "What are the biggest technical challenges the team faces?"
+3. "How does the engineering team collaborate with product?"
+4. "What's the career progression path for this role?"
+
+---
+
+**Good luck with your interview at Multinet Up!**
